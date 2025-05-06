@@ -73,50 +73,251 @@ _FIBROSIS_TERMS = (
 )
 
 def _summarise_pubchem(records: Dict[str, Any]) -> Dict[str, Any]:
-    """Condense PubChem blobs to the few fields relevant for fibrosis."""
+    """
+    Condense PubChem blobs to fields relevant for cardiac fibrosis analysis.
+    
+    Focuses on:
+    - Basic chemical properties
+    - Bioactivity data particularly related to TGF-β and fibrosis pathways
+    - Classifications and biological targets
+    - Epigenetic mechanisms including BRD4 inhibition
+    """
     summary: Dict[str, Any] = {}
-
+    
+    # Basic chemical properties
     for path, blob in records.items():
         if "/property/" in path:
             props = blob.get("PropertyTable", {}).get("Properties", [{}])[0]
             summary["formula"] = props.get("MolecularFormula")
             summary["mol_weight"] = props.get("MolecularWeight")
+            summary["canonical_smiles"] = props.get("CanonicalSMILES")
+            summary["hydrogen_bond_donors"] = props.get("HBondDonorCount")
+            summary["hydrogen_bond_acceptors"] = props.get("HBondAcceptorCount")
+            summary["rotatable_bonds"] = props.get("RotatableBondCount")
+            summary["xlogp"] = props.get("XLogP")  # Lipophilicity
+            summary["topological_polar_surface_area"] = props.get("TPSA")
             break
-
+    
+    # Chemical classification
     for path, blob in records.items():
         if "/classification/" in path:
-            cl = (
-                blob.get("HierarchicalClassificationTree", {})
-                    .get("ClassificationNode", {})
-                    .get("ToOne", {})
-            )
+            class_tree = blob.get("HierarchicalClassificationTree", {})
+            class_node = class_tree.get("ClassificationNode", {})
+            
+            # Extract hierarchical classification
+            cl = class_node.get("ToOne", {})
             levels = []
-            while isinstance(cl, dict) and "NodeName" in cl and len(levels) < 3:
+            while isinstance(cl, dict) and "NodeName" in cl and len(levels) < 5:
                 levels.append(cl["NodeName"])
                 cl = cl.get("ToOne", {})
-            summary["classification"] = " ⭢ ".join(levels)
+            summary["classification"] = " ⭢ ".join(levels) if levels else None
+            
+            # Extract alternate classifications if available
+            summary["pharmacological_class"] = None
+            summary["mechanism_of_action"] = None
+            if "AlternateNodes" in class_node:
+                alt_nodes = class_node.get("AlternateNodes", {}).get("AlternateNode", [])
+                if not isinstance(alt_nodes, list):
+                    alt_nodes = [alt_nodes]
+                
+                for node in alt_nodes:
+                    category = node.get("CategoryName", "")
+                    node_name = node.get("NodeName", "")
+                    if "Pharmacologic" in category:
+                        summary["pharmacological_class"] = node_name
+                    elif "Mechanism" in category:
+                        summary["mechanism_of_action"] = node_name
             break
-
+    
+    # Enhanced fibrosis-related terms based on research
+    _FIBROSIS_TERMS = [
+        # Direct fibrosis and cardiac terms
+        "fibro", "cardiac", "heart", "cardio", "myocard", 
+        
+        # Growth factors and signaling pathways critical in fibrosis
+        "tgf", "transforming growth factor", "smad", "wnt", "mapk", "nf-kb",
+        "gsk3", "ctgf", "pdgf", "fgf", "egf", "igf",
+        
+        # Cell types and processes involved in fibrosis
+        "myofibro", "fibroblast", "epithelial-mesenchymal", "emt",
+        "endothelial-mesenchymal", "endmt", "inflamm",
+        
+        # ECM components and remodeling
+        "collagen", "extracellular matrix", "ecm", "mmp", "timp",
+        "fibronectin", "laminin", "elastin", "proteoglycan",
+        
+        # Receptors and signaling molecules important in fibrosis
+        "integrin", "angiotensin", "aldosterone", "endothelin", 
+        "thrombospondin", "interleukin", "cytokine", "chemokine",
+        
+        # Epigenetic regulators (important for capturing BRD4 inhibitors)
+        "brd4", "brd", "bromodomain", "bet", "epigenetic", "histone",
+        "acetyl", "methylation", "chromatin", "hdac", "sirtuin",
+        
+        # Anti-fibrotic compounds
+        "pirfenidone", "nintedanib", "tranilast", "relaxin",
+        
+        # Cardiomyopathy-related terms
+        "hypertrophy", "cardiomyopathy", "heart failure"
+    ]
+    
+    # Fibrosis-related bioassays
     assays = []
+    brd4_inhibitor_evidence = False
+    anti_fibrotic_evidence = False
+    tgf_beta_evidence = False
+    
     for path, blob in records.items():
         if "/assaysummary/" in path:
-            rows = (
-                blob.get("AssayTable", {})
-                    .get("Rows", [])
-            )
+            rows = blob.get("AssayTable", {}).get("Rows", [])
             for row in rows:
                 title = row.get("Name", "").lower()
                 outcome = row.get("ActivityOutcome", "")
-                if outcome != "Inactive" and any(t in title for t in _FIBROSIS_TERMS):
-                    assays.append({
+                
+                # Check for BRD4 inhibitor evidence
+                if ("brd4" in title or "bromodomain" in title or "bet" in title) and outcome == "Active":
+                    brd4_inhibitor_evidence = True
+                
+                # Check for anti-fibrotic evidence
+                if any(term in title for term in ["anti-fibrotic", "antifibrotic", "fibrosis inhibit"]) and outcome == "Active":
+                    anti_fibrotic_evidence = True
+                
+                # Check for TGF-β activity
+                if ("tgf" in title or "transforming growth factor" in title) and outcome == "Active":
+                    tgf_beta_evidence = True
+                
+                # Include assays related to fibrosis terms
+                if any(t in title for t in _FIBROSIS_TERMS):
+                    assay_data = {
                         "aid": row.get("AID"),
                         "title": row.get("Name"),
                         "outcome": outcome,
-                    })
-                if len(assays) == 5:
+                        "activity_value": row.get("ActivityValue"),
+                        "activity_unit": row.get("ActivityUnit"),
+                    }
+                    
+                    # Add assay type if available
+                    assay_type = row.get("AssayType")
+                    if assay_type:
+                        assay_data["assay_type"] = assay_type
+                    
+                    assays.append(assay_data)
+                
+                # Limit to reasonable number while prioritizing active results
+                if len(assays) >= 15 and outcome != "Active":
                     break
+    
     if assays:
         summary["assays"] = assays
+    
+    # Add detected mechanisms
+    detected_mechanisms = {}
+    if brd4_inhibitor_evidence:
+        detected_mechanisms["BRD4_inhibitor"] = True
+    if anti_fibrotic_evidence:
+        detected_mechanisms["anti_fibrotic"] = True
+    if tgf_beta_evidence:
+        detected_mechanisms["tgf_beta_modulator"] = True
+    
+    if detected_mechanisms:
+        summary["detected_mechanisms"] = detected_mechanisms
+    
+    # Target interactions - particularly important for fibrosis
+    targets = []
+    for path, blob in records.items():
+        if "/target/" in path or "/protein/" in path:
+            target_data = blob.get("ProteinTargets", {}).get("Targets", [])
+            if not isinstance(target_data, list):
+                target_data = [target_data]
+                
+            for target in target_data:
+                target_name = target.get("Name", "").lower() if target.get("Name") else ""
+                important_targets = [
+                    "tgf", "smad", "integrin", "receptor", "kinase", "brd", 
+                    "bromodomain", "hdac", "acetyltransferase", "methyltransferase"
+                ]
+                if any(t in target_name for t in important_targets):
+                    target_info = {
+                        "name": target.get("Name"),
+                        "id": target.get("ID"),
+                        "interaction_type": target.get("InteractionType", "Unknown"),
+                    }
+                    targets.append(target_info)
+                    
+                    # Update mechanism info based on targets
+                    if "brd4" in target_name or "bromodomain" in target_name:
+                        if not "detected_mechanisms" in summary:
+                            summary["detected_mechanisms"] = {}
+                        summary["detected_mechanisms"]["BRD4_inhibitor"] = True
+                    
+                    if "tgf" in target_name or "transforming growth factor" in target_name:
+                        if not "detected_mechanisms" in summary:
+                            summary["detected_mechanisms"] = {}
+                        summary["detected_mechanisms"]["tgf_beta_modulator"] = True
+    
+    if targets:
+        summary["targets"] = targets
+    
+    # Pathways information
+    pathways = []
+    for path, blob in records.items():
+        if "/pathway/" in path:
+            pathway_data = blob.get("PathwayList", {}).get("Pathways", [])
+            if not isinstance(pathway_data, list):
+                pathway_data = [pathway_data]
+                
+            for pathway in pathway_data:
+                pathway_name = pathway.get("Name", "").lower() if pathway.get("Name") else ""
+                important_pathways = [
+                    "tgf", "smad", "wnt", "mapk", "fibrosis", "cardiac", "brd", 
+                    "bromodomain", "inflammatory", "nf-kb"
+                ]
+                if any(t in pathway_name for t in important_pathways):
+                    pathway_info = {
+                        "name": pathway.get("Name"),
+                        "id": pathway.get("ID"),
+                        "source": pathway.get("Source")
+                    }
+                    pathways.append(pathway_info)
+                    
+                    # Update mechanism info based on pathways
+                    if "fibrosis" in pathway_name:
+                        if not "detected_mechanisms" in summary:
+                            summary["detected_mechanisms"] = {}
+                        summary["detected_mechanisms"]["fibrosis_related"] = True
+    
+    if pathways:
+        summary["pathways"] = pathways
+    
+    # Literature mentions - search for fibrosis-related terms in title or abstract
+    literature_mentions = []
+    for path, blob in records.items():
+        if "/literature/" in path:
+            refs = blob.get("References", [])
+            if not isinstance(refs, list):
+                refs = [refs]
+            
+            for ref in refs:
+                title = ref.get("Title", "").lower() if ref.get("Title") else ""
+                abstract = ref.get("Abstract", "").lower() if ref.get("Abstract") else ""
+                
+                if any(t in title or t in abstract for t in _FIBROSIS_TERMS):
+                    lit_info = {
+                        "pmid": ref.get("PMID"),
+                        "title": ref.get("Title"),
+                        "year": ref.get("Year")
+                    }
+                    literature_mentions.append(lit_info)
+                    
+                    # Update mechanism info based on literature
+                    if any(t in title or t in abstract for t in ["anti-fibrotic", "antifibrotic", "reduces fibrosis"]):
+                        if not "detected_mechanisms" in summary:
+                            summary["detected_mechanisms"] = {}
+                        summary["detected_mechanisms"]["anti_fibrotic_literature"] = True
+    
+    if literature_mentions:
+        summary["literature_mentions"] = literature_mentions
+    
     return summary
 
 def analyze_fibrosis(state: FibrosisState, llm: ChatOpenAI) -> FibrosisState:
@@ -200,9 +401,3 @@ def evaluate_drug(drug_name: str, llm: ChatOpenAI | None = None) -> Dict[str, An
         "rationale" : result.get("rationale", "No rationale generated."),
         "tool_trace": result.get("tool_trace", result.get("trace", [])),
     }
-
-
-if __name__ == "__main__":
-    from langchain_openai import ChatOpenAI
-    result = evaluate_drug("JQ1", llm=ChatOpenAI(model="gpt-4o-mini", temperature=0))
-    print(result)

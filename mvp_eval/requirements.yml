@@ -1,0 +1,14 @@
+name: cf-compound-selection
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - jupyter
+  - pytest
+  - typing_extensions
+  - httpx
+  - pip
+  - pip:
+    - langgraph
+    - langchain-openai

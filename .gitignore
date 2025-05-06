@@ -71,3 +71,6 @@ docs/_build/     # Sphinx
 *~
 .DS_Store
 Thumbs.db
+
+# Eval results
+mvp_eval/agent_results/

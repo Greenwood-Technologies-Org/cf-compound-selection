@@ -1,0 +1,15 @@
+name: birdhouse_backend_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - uv
+  - ipykernel
+  - python-dotenv
+  - pip:
+      - modal
+      - fastapi>=0.111.5
+      - uvicorn
+      - litellm>=1.63.0
+      # - litellm=1.58.4 # pinned because of issue: https://github.com/BerriAI/litellm/issues/9792

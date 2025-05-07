@@ -1,0 +1,76 @@
+###############################################################################
+#  Core Python artefacts                                                      #
+###############################################################################
+__pycache__/
+*.py[cod]          # .pyc/.pyo/.pyd
+*.pyd              # Windows C‑extensions
+*.so               # Linux C‑extensions
+*.dylib            # macOS C‑extensions
+
+###############################################################################
+#  Virtual‑envs & dependency managers                                         #
+###############################################################################
+# Put whichever names you use at the top of the tree
+.venv/
+venv/
+env/
+ENV/
+# Poetry
+.poetry/
+# Pipenv
+Pipfile.lock
+
+###############################################################################
+#  Build / packaging                                                          #
+###############################################################################
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+# setuptools‑generated metadata (the “agent/backend.egg-info” stuff)
+*.egg-info/
+dependency_links.txt
+PKG-INFO
+SOURCES.txt
+requires.txt
+top_level.txt
+
+###############################################################################
+#  Test & coverage outputs                                                    #
+###############################################################################
+htmlcov/
+.tox/
+.nox/
+.coverage*
+coverage.xml
+pytest_cache/
+nosetests.xml
+
+###############################################################################
+#  Documentation builds                                                       #
+###############################################################################
+/_site           # MkDocs
+docs/_build/     # Sphinx
+
+###############################################################################
+#  Notebook, data, & experiment cruft                                         #
+###############################################################################
+.ipynb_checkpoints/
+*.csv
+*.tsv
+*.log
+*.sqlite3
+
+###############################################################################
+#  IDE / editor settings & OS miscellany                                      #
+###############################################################################
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Eval results
+mvp_eval/agent_results/

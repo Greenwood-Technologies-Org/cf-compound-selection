@@ -23,7 +23,7 @@ app = FastAPI()
 # Add CORS middleware with more specific configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://birdhouse-omega.vercel.app"],  # Frontend URL
+    allow_origins=["http://localhost:3000", "https://birdhouse-omega.vercel.app", "https://cf-compound-selection.vercel.app"],  # Frontend URL
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly list allowed methods
     allow_headers=["*"],
